@@ -497,15 +497,38 @@ with tab_clusteric:
     
     if clusteric_file is not None:
         try:
-            # Wczytanie pliku
-            if clusteric_file.name.endswith(".csv"):
+            # Wczytanie pliku z obsługą .csv, .xlsx, .xls oraz formatów hybrydowych
+            file_name_lower = clusteric_file.name.lower()
+            if file_name_lower.endswith(".csv"):
                 try:
                     df_raw = pd.read_csv(clusteric_file, sep=None, engine="python", encoding="utf-8")
                 except Exception:
                     clusteric_file.seek(0)
                     df_raw = pd.read_csv(clusteric_file, sep=None, engine="python", encoding="cp1250")
             else:
-                df_raw = pd.read_excel(clusteric_file)
+                try:
+                    # Standardowy odczyt Excel (openpyxl dla .xlsx, xlrd dla .xls)
+                    df_raw = pd.read_excel(clusteric_file)
+                except Exception as excel_err:
+                    clusteric_file.seek(0)
+                    # Fallback 1: plik .xls może być plikiem tekstowym CSV/TSV
+                    try:
+                        df_raw = pd.read_csv(clusteric_file, sep=None, engine="python", encoding="utf-8")
+                    except Exception:
+                        clusteric_file.seek(0)
+                        try:
+                            df_raw = pd.read_csv(clusteric_file, sep=None, engine="python", encoding="cp1250")
+                        except Exception:
+                            # Fallback 2: plik .xls może być tabelą HTML zapisaną jako .xls
+                            clusteric_file.seek(0)
+                            try:
+                                tables = pd.read_html(clusteric_file)
+                                if tables:
+                                    df_raw = tables[0]
+                                else:
+                                    raise excel_err
+                            except Exception:
+                                raise excel_err
 
             df_raw.columns = [str(c).strip() for c in df_raw.columns]
             cols = list(df_raw.columns)
